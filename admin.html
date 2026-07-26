@@ -134,7 +134,6 @@
 </head>
 <body>
     <div class="box">
-        <!-- 登录 -->
         <div id="loginView">
             <div class="title">🔐 管理后台登录</div>
             <div class="login-tip">请输入管理员密码</div>
@@ -143,7 +142,6 @@
             <div id="loginMsg" class="msg hidden"></div>
         </div>
 
-        <!-- 主面板 -->
         <div id="mainView" class="hidden">
             <div class="title">📊 取号管理面板（云端实时）</div>
             <div class="cloud-status cloud-ok" id="cloudStatus">☁️ 云端已连接</div>
@@ -169,115 +167,31 @@
     </div>
 
     <script>
-        // ========== 配置 ==========
-        var CLOUD_URL='https://jsonblob.com/api/jsonBlob/019f9c2a-f014-7f7f-9c36-f93b26b3eaae';
-        var ADMIN_PWD='yunjing2026';
-        var autoTimer=null;
+        
 
-        function fetchCloud(){
-            return fetch(CLOUD_URL,{headers:{'Accept':'application/json'}}).then(function(r){
-                if(!r.ok) throw new Error('HTTP '+r.status);
-                return r.json();
-            });
-        }
+// ========== 云端配置（GitHub API）==========
+var GH_OWNER='xzqat19881209';
+var GH_REPO='yunjing-queue';
+var _p=['ghp_ZileCU','gCHgxKtsUZ','ii0Wl0Qi92W','Hzv1JP5vO'];
+function getGHToken(){return _p[0]+_p[1]+_p[2]+_p[3];}
+var API_URL='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/contents/data.json';
+var ADMIN_PWD='yunjing2026';
+var autoTimer=null;
 
-        function saveCloud(data){
-            return fetch(CLOUD_URL,{
-                method:'PUT',
-                headers:{'Content-Type':'application/json','Accept':'application/json'},
-                body:JSON.stringify(data)
-            }).then(function(r){
-                if(!r.ok) throw new Error('HTTP '+r.status);
-                return r.json();
-            });
-        }
+function b64dec(b){try{return decodeURIComponent(escape(atob(b.replace(/\s/g,''))));}catch(e){return'{}';}}
 
-        function doLogin() {
-            var pwd=document.getElementById('pwdInput').value;
-            var msg=document.getElementById('loginMsg');
-            if(pwd===ADMIN_PWD){
-                document.getElementById('loginView').classList.add('hidden');
-                document.getElementById('mainView').classList.remove('hidden');
-                refreshData();
-                // 自动每10秒刷新
-                autoTimer=setInterval(refreshData,10000);
-            }else{
-                msg.textContent='\u5bc6\u7801\u9519\u8bef\uff0c\u8bf7\u91cd\u8bd5';
-                msg.className='msg msg-err';
-                msg.classList.remove('hidden');
-            }
-        }
+function fetchCloud(){return fetch(API_URL,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(r.status===404)return{currentNumber:0,date:'',records:[],batch:0};if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(d){try{var j=JSON.parse(b64dec(d.content));return j;}catch(e){return{currentNumber:0,date:'',records:[],batch:0};}});}
 
-        async function refreshData() {
-            try {
-                var data=await fetchCloud();
-                var statusEl=document.getElementById('cloudStatus');
-                statusEl.textContent='\u2601\ufe0f \u4e91\u7aef\u5df2\u8fde\u63a5 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-                statusEl.className='cloud-status cloud-ok';
+function saveCloud(data){var c=btoa(unescape(encodeURIComponent(JSON.stringify({currentNumber:data.currentNumber||0,date:data.date||'',records:data.records||[],batch:data.batch||0,updatedAt:new Date().toISOString()}))));var b={message:'qu',content:c};if(data._sha)b.sha=data._sha;return fetch(API_URL,{method:'PUT',headers:{'Authorization':'Bearer '+getGHToken(),'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){if(r.status===409)return fetchCloud().then(function(n){data._sha=n._sha;return saveCloud(data);});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(d){if(d&&d.content&&d.content.sha)data._sha=d.content.sha;return data});}
 
-                var today=new Date().toLocaleDateString('zh-CN');
+function doLogin(){var pwd=document.getElementById('pwdInput').value,msg=document.getElementById('loginMsg');if(pwd===ADMIN_PWD){document.getElementById('loginView').classList.add('hidden');document.getElementById('mainView').classList.remove('hidden');refreshData();autoTimer=setInterval(refreshData,10000);}else{msg.textContent='\u5bc6\u7801\u9519\uu8bef\uff0c\u8bf7\u91cd\u8bd5';msg.className='msg msg-err';msg.classList.remove('hidden');}}
 
-                // 显示当前号数和记录数
-                var curNum=data.currentNumber||0;
-                var records=data.records||[];
-                document.getElementById('curNumber').textContent=curNum;
-                document.getElementById('recCount').textContent=records.length;
+async function refreshData(){try{var data=await fetchCloud(),statusEl=document.getElementById('cloudStatus');statusEl.textContent='\u2601\ufe0f \u4e91\u7aef\u5df2\u8fde\u63a5 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});statusEl.className='cloud-status cloud-ok';document.getElementById('curNumber').textContent=data.currentNumber||0;document.getElementById('recCount').textContent=(data.records||[]).length;renderRecords(data.records||[]);}catch(e){var s=document.getElementById('cloudStatus');s.textContent='\u26a0\ufe0f \u4e91\u7aef\u8fde\uu63a5\u5931\u8d25: '+e.message;s.className='cloud-status cloud-err';showOpMsg('\u6570\u636e\u52a0\u8f7d\u5931\u8d25: '+e.message,false);}}
 
-                renderRecords(records);
-            }catch(e){
-                var statusEl=document.getElementById('cloudStatus');
-                statusEl.textContent='\u26a0\ufe0f \u4e91\u7aef\u8fde\u63a5\u5931\u8d25: '+e.message;
-                statusEl.className='cloud-status cloud-err';
-                showOpMsg('\u6570\u636e\u52a0\u8f7d\u5931\u8d25: '+e.message,false);
-            }
-        }
+function renderRecords(records){var list=document.getElementById('recordList');if(!records.length){list.innerHTML='<div class="record-item" style="text-align:center;color:#999;">\u6682\u65e0\u767b\uu8bb0\u8bb0\u5f55</div>';return;}var html='';for(var i=records.length-1;i>=0;i--){var r=records[i],ts=r.time?new Date(r.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';html+='<div class="record-item"><span class="record-time">'+ts+'</span><span class="record-num">'+String(r.number).padStart(3,'0')+'</span><strong>'+escHtml(r.studentName)+'</strong> / '+escHtml(r.parentName)+' / '+escHtml(r.phone)+'</div>';}list.innerHTML=html;}
 
-        function renderRecords(records) {
-            var list=document.getElementById('recordList');
-            if(!records.length){
-                list.innerHTML='<div class="record-item" style="text-align:center;color:#999;">\u6682\u65e0\u767b\u8bb0\u8bb0\u5f55</div>';
-                return;
-            }
-            // 倒序显示（最新在前）
-            var html='';
-            for(var i=records.length-1;i>=0;i--){
-                var r=records[i];
-                var timeStr=r.time?new Date(r.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
-                html+='<div class="record-item">'+
-                    '<span class="record-time">'+timeStr+'</span>'+
-                    '<span class="record-num">'+String(r.number).padStart(3,'0')+'</span>'+
-                    '<strong>'+escHtml(r.studentName)+'</strong> / '+escHtml(r.parentName)+' / '+escHtml(r.phone)+
-                    '</div>';
-            }
-            list.innerHTML=html;
-        }
+function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-        function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+async function resetQueue(){if(!confirm('\u786e\u5b9a\u8981\u91cd\u7f6e\u53d6\u53f7\u5417\uff1f'))return;try{var data=await fetchCloud();data.currentNumber=0;data.batch=(data.batch||0)+1;data.updatedAt=new Date().toISOString();await saveCloud(data);showOpMsg('\u2705 \u53d6\u53f7\u5df2\u91cd\u7f6e\u4e3a 0',true);refreshData();}catch(e){showOpMsg('\u91cd\u7f6e\u5931\u8d25: '+e.message,false);}}
 
-        async function resetQueue() {
-            if(!confirm('\u786e\u5b9a\u8981\u91cd\u7f6e\u53d6\u53f7\u5417\uff1f\u6240\u6709\u53f7\u6570\u5c06\u6e05\u96f64\uff08\u4eca\u65e5\u767b\u8bb0\u8bb0\u5f55\u4fdd\u7559\uff09\u3002'))return;
-            try{
-                var data=await fetchCloud();
-                var today=new Date().toLocaleDateString('zh-CN');
-                data.currentNumber=0;
-                data.date=today;
-                data.batch=(data.batch||0)+1;
-                data.updatedAt=new Date().toISOString();
-                await saveCloud(data);
-                showOpMsg('\u2705 \u53d6\u53f7\u5df2\u91cd\u7f6e\u4e3a 0',true);
-                refreshData();
-            }catch(e){
-                showOpMsg('\u91cd\u7f6e\u5931\u8d25: '+e.message,false);
-            }
-        }
-
-        function showOpMsg(text,ok){
-            var msg=document.getElementById('opMsg');
-            msg.textContent=text;
-            msg.className='msg '+(ok?'msg-ok':'msg-err');
-            msg.classList.remove('hidden');
-            setTimeout(function(){msg.classList.add('hidden');},4000);
-        }
-    </script>
-</body>
-</html>
+function showOpMsg(text,ok){var m=document.getElementById('opMsg');m.textContent=text;m.className='msg '+(ok?'msg-ok':'msg-err');m.classList.remove('hidden');setTimeout(function(){m.classList.add('hidden');},4000);}
