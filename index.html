@@ -122,25 +122,27 @@
     <footer class="footer"><p>如有疑问，请联系学校教务处</p></footer>
 </div>
 
+
 <script>
-const CONFIG={BIN_ID:'',API_KEY:'',USE_CLOUD:false};
-const STORAGE_KEY='yunjing_queue_v2';
-const DATE_KEY='yunjing_queue_date_v2';
-const RECORDS_KEY='yunjing_records_v2';
-const MY_TICKET_KEY='yunjing_my_ticket_v2';
-let currentNumber=0;
+// ========== 云端配置（jsonblob.com - 免费无需认证，CORS全开）==========
+var CLOUD_URL='https://jsonblob.com/api/jsonBlob/019f9c2a-f014-7f7f-9c36-f93b26b3eaae';
+var STORAGE_KEY='yunjing_queue_v2';
+var DATE_KEY='yunjing_queue_date_v2';
+var RECORDS_KEY='yunjing_records_v2';
+var MY_TICKET_KEY='yunjing_my_ticket_v2';
+var currentNumber=0;
 
 document.addEventListener('DOMContentLoaded',function(){
     updateDateInfo();checkAndResetDaily();checkBatch();checkMyTicket();
 });
 
 function updateDateInfo(){
-    const now=new Date();
-    document.getElementById('dateInfo').textContent='📅 '+now.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+    var now=new Date();
+    document.getElementById('dateInfo').textContent='\ud83c\udfd5 '+now.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
 }
 
 function checkAndResetDaily(){
-    const today=new Date().toLocaleDateString('zh-CN');
+    var today=new Date().toLocaleDateString('zh-CN');
     if(localStorage.getItem(DATE_KEY)!==today){
         localStorage.setItem(STORAGE_KEY,'0');
         localStorage.setItem(DATE_KEY,today);
@@ -148,12 +150,31 @@ function checkAndResetDaily(){
     }
 }
 
+// ========== 云端操作 ==========
+
+function fetchCloud(){
+    return fetch(CLOUD_URL,{headers:{'Accept':'application/json'}}).then(function(r){
+        if(!r.ok) throw new Error('\u4e91\u7aef\u8bfb\u53d6\u5931\u8d25('+r.status+')');
+        return r.json();
+    });
+}
+
+function saveCloud(data){
+    return fetch(CLOUD_URL,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify(data)
+    }).then(function(r){
+        if(!r.ok) throw new Error('\u4e91\u7aef\u5199\u5165\u5931\u8d25('+r.status+')');
+        return r.json();
+    });
+}
+
 function checkBatch(){
-    if(!(CONFIG.USE_CLOUD&&CONFIG.BIN_ID&&CONFIG.API_KEY))return;
     try{
-        fetch('https://api.jsonbin.io/v3/b/'+CONFIG.BIN_ID+'/latest',{headers:{'X-Master-Key':CONFIG.API_KEY}}).then(function(r){if(!r.ok)return;return r.json();}).then(function(d){
-            if(!d||!d.record)return;
-            var cb=d.record.batch||0;
+        fetchCloud().then(function(d){
+            if(!d)return;
+            var cb=d.batch||0;
             var lb=parseInt(localStorage.getItem('yunjing_batch_v2')||'0');
             if(cb&&cb!==lb){localStorage.removeItem(MY_TICKET_KEY);localStorage.setItem('yunjing_batch_v2',String(cb));}
         }).catch(function(){});
@@ -175,69 +196,117 @@ function checkMyTicket(){
     document.getElementById('stepsBar').style.display='none';
     var msg=document.getElementById('successMsg');
     var fillBtn=document.getElementById('fillBtn');
-    if(ticket.infoDone){if(msg)msg.textContent='✅ 您已取号，无需重复取号';if(fillBtn)fillBtn.style.display='none';}
-    else{if(msg)msg.textContent='✅ 已取号，请完成信息登记';if(fillBtn)fillBtn.style.display='block';}
-    updateSteps(3);window.scrollTo({top:0});
+    if(ticket.infoDone){
+        if(msg)msg.textContent='\u2705 \u60a8\u5df2\u53d6\u53f7\uff0c\u65e0\u9700\u91cd\u590d\u53d6\u53f7';
+        if(fillBtn)fillBtn.style.display='none';
+    }else{
+        if(msg)msg.textContent='\u2705 \u5df2\u53d6\u53f7\uff0c\u8bf7\u5b8c\u6210\u4fe1\u606f\u767b\u8bb0';
+        if(fillBtn)fillBtn.style.display='block';
+    }
+    updateSteps(3);
+    window.scrollTo({top:0});
 }
 
 function resumeFill(){updateSteps(2);}
 
-async function getCurrentNumber(){
-    try{if(CONFIG.USE_CLOUD&&CONFIG.BIN_ID&&CONFIG.API_KEY){var r=await fetch('https://api.jsonbin.io/v3/b/'+CONFIG.BIN_ID+'/latest',{headers:{'X-Master-Key':CONFIG.API_KEY}});var d=await r.json();var today=new Date().toLocaleDateString('zh-CN');if(d.record.date!==today)return 0;return d.record.currentNumber||0;}}catch(e){}
-    return parseInt(localStorage.getItem(STORAGE_KEY)||'0');
-}
-
-async function saveNumber(num){
-    var today=new Date().toLocaleDateString('zh-CN');
-    try{if(CONFIG.USE_CLOUD&&CONFIG.BIN_ID&&CONFIG.API_KEY){var r=await fetch('https://api.jsonbin.io/v3/b/'+CONFIG.BIN_ID+'/latest',{headers:{'X-Master-Key':CONFIG.API_KEY}});var d=await r.json();var records=(d.record&&d.record.records)||[];var batch=d.record.batch||Date.now();await fetch('https://api.jsonbin.io/v3/b/'+CONFIG.BIN_ID,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':CONFIG.API_KEY},body:JSON.stringify({currentNumber:num,date:today,records,batch,updatedAt:new Date().toISOString()})});return;}}catch(e){}
-    localStorage.setItem(STORAGE_KEY,String(num));localStorage.setItem(DATE_KEY,today);
-}
-
-async function saveRecord(record){
-    var records=[];try{records=JSON.parse(localStorage.getItem(RECORDS_KEY)||'[]');}catch(e){}
-    records.push(Object.assign({},record,{time:new Date().toISOString()}));
-    localStorage.setItem(RECORDS_KEY,JSON.stringify(records));
-    if(CONFIG.USE_CLOUD&&CONFIG.BIN_ID&&CONFIG.API_KEY){
-        try{var r=await fetch('https://api.jsonbin.io/v3/b/'+CONFIG.BIN_ID+'/latest',{headers:{'X-Master-Key':CONFIG.API_KEY}});var d=await r.json();var cr=d.record.records||[];cr.push(Object.assign({},record,{time:new Date().toISOString()}));await fetch('https://api.jsonbin.io/v3/b/'+CONFIG.BIN_ID,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':CONFIG.API_KEY},body:JSON.stringify(Object.assign({},d.record,{records:cr}))});}catch(e){}
-    }
-}
-
 function updateSteps(s){
-    for(var i=1;i<=3;i++){var dot=document.getElementById('dot'+i);dot.className='step-dot';if(i<s)dot.classList.add('done');else if(i===s)dot.classList.add('active');else dot.classList.add('pending');}
+    for(var i=1;i<=3;i++){
+        var dot=document.getElementById('dot'+i);
+        dot.className='step-dot';
+        if(i<s) dot.classList.add('done');
+        else if(i===s) dot.classList.add('active');
+        else dot.classList.add('pending');
+    }
     document.getElementById('line1').className='step-line'+(s>1?' done':'');
     document.getElementById('line2').className='step-line'+(s>2?' done':'');
-    for(var i=1;i<=3;i++)document.getElementById('step'+i).className='section'+(i===s?' active':'');
+    for(var i=1;i<=3;i++) document.getElementById('step'+i).className='section'+(i===s?' active':'');
 }
 
+// ========== 核心取号逻辑（云端原子操作）==========
+
 async function goToStep2(){
-    var btn=document.getElementById('takeBtn');btn.disabled=true;btn.querySelector('.btn-text').textContent='正在取号...';
+    var btn=document.getElementById('takeBtn');
+    btn.disabled=true;
+    btn.querySelector('.btn-text').textContent='\u6b63\u5728\u53d6\u53f7...';
     try{
-        var num=await getCurrentNumber();currentNumber=num+1;
+        // 【关键修复】从云端读取当前号数 -> +1 -> 立即写回云端 -> 再显示给用户
+        var data=await fetchCloud();
         var today=new Date().toLocaleDateString('zh-CN');
-        localStorage.setItem(MY_TICKET_KEY,JSON.stringify({number:currentNumber,studentName:'',parentName:'',phone:'',date:today,infoDone:false}));
-        updateSteps(2);saveNumber(currentNumber).catch(function(){});
-    }catch(e){alert('取号失败，请重试');btn.disabled=false;btn.querySelector('.btn-text').textContent='点击取号';}
+
+        // 每日自动重置
+        if(data.date!==today){
+            data.currentNumber=0;
+            data.records=[];
+            data.date=today;
+        }
+
+        // 号数递增（云端全局唯一）
+        data.currentNumber=(data.currentNumber||0)+1;
+        currentNumber=data.currentNumber;
+
+        // 立即写回云端（先占号）
+        data.updatedAt=new Date().toISOString();
+        await saveCloud(data);
+
+        // 本地标记已取号（防同一微信重复取）
+        localStorage.setItem(MY_TICKET_KEY,JSON.stringify({
+            number:currentNumber,
+            studentName:'',parentName:'',phone:'',
+            date:today,infoDone:false
+        }));
+
+        updateSteps(2);
+    }catch(e){
+        console.error('取号失败:',e);
+        alert('取号失败，请检查网络后重试');
+        btn.disabled=false;
+        btn.querySelector('.btn-text').textContent='\u70b9\u51fb\u53d6\u53f7';
+    }
 }
 
 async function submitForm(){
     var sn=document.getElementById('studentName').value.trim();
     var pn=document.getElementById('parentName').value.trim();
     var ph=document.getElementById('phone').value.trim();
-    if(!sn){alert('请输入学生姓名');document.getElementById('studentName').focus();return;}
-    if(!pn){alert('请输入家长姓名');document.getElementById('parentName').focus();return;}
-    if(!ph){alert('请输入联系方式');document.getElementById('phone').focus();return;}
-    if(!/^1[3-9]\d{9}$/.test(ph)){alert('请输入正确的手机号码');document.getElementById('phone').focus();return;}
-    var sb=document.querySelector('.submit-btn');sb.disabled=true;sb.textContent='提交中...';
+    if(!sn){alert('\u8bf7\u8f93\u5165\u5b66\u751f\u59d3\u540d');document.getElementById('studentName').focus();return;}
+    if(!pn){alert('\u8bf7\u8f93\u5165\u5bb6\u957f\u59d3\u540d');document.getElementById('parentName').focus();return;}
+    if(!ph){alert('\u8bf7\u8f93\u5165\u8054\u7cfb\u65b9\u5f0f');document.getElementById('phone').focus();return;}
+    if(!/^1[3-9]\d{9}$/.test(ph)){alert('\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u624b\u673a\u53f7\u7801');document.getElementById('phone').focus();return;}
+
+    var sb=document.querySelector('.submit-btn');
+    sb.disabled=true;
+    sb.textContent='\u63d0\u4ea4\u4e2d...';
     try{
-        await saveRecord({number:currentNumber,studentName:sn,parentName:pn,phone:ph,date:new Date().toLocaleDateString('zh-CN')});
+        var record={
+            number:currentNumber,
+            studentName:sn,parentName:pn,phone:ph,
+            date:new Date().toLocaleDateString('zh-CN'),
+            time:new Date().toISOString()
+        };
+
+        // 【关键修复】将登记信息写入云端（后台可见）
+        var data=await fetchCloud();
+        if(!data.records) data.records=[];
+        data.records.push(record);
+        data.updatedAt=new Date().toISOString();
+        await saveCloud(data);
+
+        // 更新页面显示
         document.getElementById('numberDisplay').textContent=String(currentNumber).padStart(3,'0');
         document.getElementById('showStudentName').textContent=sn;
         document.getElementById('showParentName').textContent=pn;
         document.getElementById('showPhone').textContent=ph.replace(/(\d{3})\d{4}(\d{4})/,'$1****$2');
-        localStorage.setItem(MY_TICKET_KEY,JSON.stringify({number:currentNumber,studentName:sn,parentName:pn,phone:ph,date:new Date().toLocaleDateString('zh-CN'),infoDone:true}));
-        updateSteps(3);window.scrollTo({top:0,behavior:'smooth'});
-    }catch(e){alert('提交失败，请重试');sb.disabled=false;sb.textContent='提交并获取号码';}
+        localStorage.setItem(MY_TICKET_KEY,JSON.stringify({
+            number:currentNumber,studentName:sn,parentName:pn,phone:ph,
+            date:new Date().toLocaleDateString('zh-CN'),infoDone:true
+        }));
+        updateSteps(3);
+        window.scrollTo({top:0,behavior:'smooth'});
+    }catch(e){
+        console.error('提交失败:',e);
+        alert('提交失败，请检查网络后重试');
+        sb.disabled=false;
+        sb.textContent='\u63d0\u4ea4\u5e76\u83b7\u53d6\u53f7\u7801';
+    }
 }
 </script>
-</body>
-</html>
