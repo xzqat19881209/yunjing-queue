@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>芸景实验小学 - 一年级新生面谈取号（打印版）</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: #f0f0f0; padding: 20px; }
+    .sheet { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    .top-bar { background: linear-gradient(135deg, #2e7d32, #43a047); color: white; text-align: center; padding: 18px; }
+    .school { font-size: 22px; font-weight: bold; }
+    .title { font-size: 28px; font-weight: bold; margin-top: 8px; letter-spacing: 2px; }
+    .sub { font-size: 15px; margin-top: 6px; opacity: 0.9; }
+    .qr-box { text-align: center; padding: 30px 20px; }
+    .qr-box img { width: 320px; height: 320px; border: 3px solid #81c784; border-radius: 12px; }
+    .scan-tip { font-size: 16px; color: #555; margin-top: 14px; }
+    .bottom { background: #fafafa; padding: 20px; border-top: 2px solid #e0e0e0; }
+    .notice-title { font-size: 16px; font-weight: bold; color: #ef6c00; margin-bottom: 10px; }
+    .material { font-size: 13px; color: #444; line-height: 1.8; padding-left: 18px; }
+    .warn { margin-top: 12px; text-align: center; font-size: 16px; font-weight: bold; color: #c62828; background: #ffebee; padding: 10px; border-radius: 8px; }
+    .print-btn { display: block; margin: 20px auto; padding: 12px 30px; font-size: 16px; background: #2e7d32; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    @media print { body { background: white; padding: 0; } .sheet { box-shadow: none; } .print-btn { display: none; } }
+</style>
+</head>
+<body>
+    <div class="sheet">
+        <div class="top-bar">
+            <div class="school">厦门市海沧区芸景实验小学</div>
+            <div class="title">一年级新生面谈取号</div>
+            <div class="sub">请使用微信扫描下方二维码取号</div>
+        </div>
+        <div class="qr-box">
+            <img src="qrcode-github.png" alt="取号二维码">
+            <div class="scan-tip">📱 微信扫码 → 点击取号 → 填写信息 → 查看号码</div>
+        </div>
+        <div class="bottom">
+            <div class="notice-title">📋 面谈请备齐以下材料</div>
+            <div class="material">
+                1.《入学通知书》原件（集体户/积分入学无需提供）<br>
+                2. 预防接种证明（"厦门疾控"公众号查验打印）<br>
+                3. 户口本原件及复印件（首页、孩子页、父母页复印于同一张A4纸）
+            </div>
+            <div class="warn">⚠️ 仅限一名家长陪同</div>
+        </div>
+    </div>
+    <button class="print-btn" onclick="window.print()">🖨️ 打印此页（贴校门口）</button>
+</body>
+</html>
