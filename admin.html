@@ -20,7 +20,7 @@
             border-radius: 16px;
             padding: 30px;
             width: 100%;
-            max-width: 420px;
+            max-width: 480px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
         .title {
@@ -84,7 +84,7 @@
         }
         .records {
             margin: 16px 0;
-            max-height: 300px;
+            max-height: 350px;
             overflow-y: auto;
         }
         .record-item {
@@ -96,9 +96,14 @@
         .record-item strong { color: #333; }
         .record-num {
             display: inline-block;
-            width: 40px;
+            width: 42px;
             font-weight: bold;
             color: #2e7d32;
+        }
+        .record-time {
+            float: right;
+            color: #aaa;
+            font-size: 11px;
         }
         .hidden { display: none; }
         .msg {
@@ -110,6 +115,21 @@
         }
         .msg-ok { background: #e8f5e9; color: #2e7d32; }
         .msg-err { background: #ffebee; color: #c62828; }
+        .cloud-status {
+            text-align: center;
+            font-size: 12px;
+            margin-bottom: 12px;
+            padding: 6px;
+            border-radius: 8px;
+        }
+        .cloud-ok { background: #e8f5e9; color: #2e7d32; }
+        .cloud-err { background: #ffebee; color: #c62828; }
+        .auto-refresh-hint {
+            text-align: center;
+            font-size: 11px;
+            color: #999;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -125,127 +145,138 @@
 
         <!-- 主面板 -->
         <div id="mainView" class="hidden">
-            <div class="title">📊 取号管理面板</div>
+            <div class="title">📊 取号管理面板（云端实时）</div>
+            <div class="cloud-status cloud-ok" id="cloudStatus">☁️ 云端已连接</div>
+
             <div class="stats">
                 <div class="stat-card">
                     <div class="stat-num" id="curNumber">0</div>
-                    <div class="stat-label">当前号数</div>
+                    <div class="stat-label">当前最大号数</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-num" id="recCount">0</div>
-                    <div class="stat-label">今日登记</div>
+                    <div class="stat-label">已登记人数</div>
                 </div>
             </div>
 
             <button class="btn btn-danger" onclick="resetQueue()">🔄 重置取号（清零）</button>
-            <button class="btn btn-secondary" onclick="refreshData()" style="margin-top:10px;">🔃 刷新数据</button>
+            <button class="btn btn-secondary" onclick="refreshData()" style="margin-top:10px;">🔃 立即刷新</button>
             <div id="opMsg" class="msg hidden"></div>
+            <div class="auto-refresh-hint" id="autoHint">⏱️ 每10秒自动刷新</div>
 
             <div class="records" id="recordList"></div>
         </div>
     </div>
 
     <script>
-        // ========== 配置（与 index.html 保持一致）==========
-        const CONFIG = {
-            BIN_ID: '',          // JSONBin.io 的 Bin ID
-            API_KEY: '',         // JSONBin.io 的 API Key
-            ADMIN_PWD: 'yunjing2026'  // 管理员密码，可自行修改
-        };
+        // ========== 配置 ==========
+        var CLOUD_URL='https://jsonblob.com/api/jsonBlob/019f9c2a-f014-7f7f-9c36-f93b26b3eaae';
+        var ADMIN_PWD='yunjing2026';
+        var autoTimer=null;
 
-        let isCloud = false;
+        function fetchCloud(){
+            return fetch(CLOUD_URL,{headers:{'Accept':'application/json'}}).then(function(r){
+                if(!r.ok) throw new Error('HTTP '+r.status);
+                return r.json();
+            });
+        }
+
+        function saveCloud(data){
+            return fetch(CLOUD_URL,{
+                method:'PUT',
+                headers:{'Content-Type':'application/json','Accept':'application/json'},
+                body:JSON.stringify(data)
+            }).then(function(r){
+                if(!r.ok) throw new Error('HTTP '+r.status);
+                return r.json();
+            });
+        }
 
         function doLogin() {
-            const pwd = document.getElementById('pwdInput').value;
-            const msg = document.getElementById('loginMsg');
-            if (pwd === CONFIG.ADMIN_PWD) {
+            var pwd=document.getElementById('pwdInput').value;
+            var msg=document.getElementById('loginMsg');
+            if(pwd===ADMIN_PWD){
                 document.getElementById('loginView').classList.add('hidden');
                 document.getElementById('mainView').classList.remove('hidden');
-                isCloud = !!(CONFIG.BIN_ID && CONFIG.API_KEY);
                 refreshData();
-            } else {
-                msg.textContent = '密码错误，请重试';
-                msg.className = 'msg msg-err';
+                // 自动每10秒刷新
+                autoTimer=setInterval(refreshData,10000);
+            }else{
+                msg.textContent='\u5bc6\u7801\u9519\u8bef\uff0c\u8bf7\u91cd\u8bd5';
+                msg.className='msg msg-err';
                 msg.classList.remove('hidden');
             }
         }
 
         async function refreshData() {
             try {
-                if (isCloud) {
-                    const resp = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}/latest`, {
-                        headers: { 'X-Master-Key': CONFIG.API_KEY }
-                    });
-                    const data = await resp.json();
-                    const today = new Date().toLocaleDateString('zh-CN');
-                    if (data.record.date !== today) {
-                        document.getElementById('curNumber').textContent = '0';
-                        document.getElementById('recCount').textContent = '0';
-                    } else {
-                        document.getElementById('curNumber').textContent = data.record.currentNumber || 0;
-                        document.getElementById('recCount').textContent = (data.record.records || []).length;
-                    }
-                    renderRecords(data.record.records || []);
-                } else {
-                    // 本地模式
-                    const num = parseInt(localStorage.getItem('yunjing_queue_v2') || '0');
-                    const records = JSON.parse(localStorage.getItem('yunjing_records_v2') || '[]');
-                    document.getElementById('curNumber').textContent = num;
-                    document.getElementById('recCount').textContent = records.length;
-                    renderRecords(records);
-                }
-            } catch(e) {
-                showOpMsg('数据加载失败：' + e.message, false);
+                var data=await fetchCloud();
+                var statusEl=document.getElementById('cloudStatus');
+                statusEl.textContent='\u2601\ufe0f \u4e91\u7aef\u5df2\u8fde\u63a5 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+                statusEl.className='cloud-status cloud-ok';
+
+                var today=new Date().toLocaleDateString('zh-CN');
+
+                // 显示当前号数和记录数
+                var curNum=data.currentNumber||0;
+                var records=data.records||[];
+                document.getElementById('curNumber').textContent=curNum;
+                document.getElementById('recCount').textContent=records.length;
+
+                renderRecords(records);
+            }catch(e){
+                var statusEl=document.getElementById('cloudStatus');
+                statusEl.textContent='\u26a0\ufe0f \u4e91\u7aef\u8fde\u63a5\u5931\u8d25: '+e.message;
+                statusEl.className='cloud-status cloud-err';
+                showOpMsg('\u6570\u636e\u52a0\u8f7d\u5931\u8d25: '+e.message,false);
             }
         }
 
         function renderRecords(records) {
-            const list = document.getElementById('recordList');
-            if (!records.length) {
-                list.innerHTML = '<div class="record-item" style="text-align:center;color:#999;">暂无登记记录</div>';
+            var list=document.getElementById('recordList');
+            if(!records.length){
+                list.innerHTML='<div class="record-item" style="text-align:center;color:#999;">\u6682\u65e0\u767b\u8bb0\u8bb0\u5f55</div>';
                 return;
             }
             // 倒序显示（最新在前）
-            list.innerHTML = records.slice().reverse().map(r =>
-                `<div class="record-item">
-                    <span class="record-num">${String(r.number).padStart(3,'0')}</span>
-                    <strong>${r.studentName}</strong> / ${r.parentName} / ${r.phone}
-                </div>`
-            ).join('');
+            var html='';
+            for(var i=records.length-1;i>=0;i--){
+                var r=records[i];
+                var timeStr=r.time?new Date(r.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
+                html+='<div class="record-item">'+
+                    '<span class="record-time">'+timeStr+'</span>'+
+                    '<span class="record-num">'+String(r.number).padStart(3,'0')+'</span>'+
+                    '<strong>'+escHtml(r.studentName)+'</strong> / '+escHtml(r.parentName)+' / '+escHtml(r.phone)+
+                    '</div>';
+            }
+            list.innerHTML=html;
         }
 
+        function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
         async function resetQueue() {
-            if (!confirm('确定要重置取号吗？所有号数将清零（今日登记记录保留）。')) return;
-            const today = new Date().toLocaleDateString('zh-CN');
-            try {
-                if (isCloud) {
-                    const resp = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}/latest`, {
-                        headers: { 'X-Master-Key': CONFIG.API_KEY }
-                    });
-                    const data = await resp.json();
-                    const records = data.record.records || [];
-                    await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'X-Master-Key': CONFIG.API_KEY },
-                        body: JSON.stringify({ currentNumber: 0, date: today, records: records, batch: Date.now(), updatedAt: new Date().toISOString() })
-                    });
-                } else {
-                    localStorage.setItem('yunjing_queue_v2', '0');
-                    localStorage.setItem('yunjing_queue_date_v2', today);
-                }
-                showOpMsg('✅ 取号已重置为 0', true);
+            if(!confirm('\u786e\u5b9a\u8981\u91cd\u7f6e\u53d6\u53f7\u5417\uff1f\u6240\u6709\u53f7\u6570\u5c06\u6e05\u96f64\uff08\u4eca\u65e5\u767b\u8bb0\u8bb0\u5f55\u4fdd\u7559\uff09\u3002'))return;
+            try{
+                var data=await fetchCloud();
+                var today=new Date().toLocaleDateString('zh-CN');
+                data.currentNumber=0;
+                data.date=today;
+                data.batch=(data.batch||0)+1;
+                data.updatedAt=new Date().toISOString();
+                await saveCloud(data);
+                showOpMsg('\u2705 \u53d6\u53f7\u5df2\u91cd\u7f6e\u4e3a 0',true);
                 refreshData();
-            } catch(e) {
-                showOpMsg('重置失败：' + e.message, false);
+            }catch(e){
+                showOpMsg('\u91cd\u7f6e\u5931\u8d25: '+e.message,false);
             }
         }
 
-        function showOpMsg(text, ok) {
-            const msg = document.getElementById('opMsg');
-            msg.textContent = text;
-            msg.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+        function showOpMsg(text,ok){
+            var msg=document.getElementById('opMsg');
+            msg.textContent=text;
+            msg.className='msg '+(ok?'msg-ok':'msg-err');
             msg.classList.remove('hidden');
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+            setTimeout(function(){msg.classList.add('hidden');},4000);
         }
     </script>
 </body>
