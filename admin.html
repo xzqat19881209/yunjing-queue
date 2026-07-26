@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>取号系统 - 管理后台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #263238;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .box {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2e7d32;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .login-tip {
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 14px;
+            outline: none;
+        }
+        .input:focus { border-color: #66bb6a; }
+        .btn {
+            width: 100%;
+            padding: 13px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+        .btn-primary { background: #43a047; }
+        .btn-danger { background: #e53935; }
+        .btn-secondary { background: #78909c; }
+        .stats {
+            display: flex;
+            gap: 12px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            flex: 1;
+            background: #f5f5f5;
+            border-radius: 12px;
+            padding: 16px 10px;
+            text-align: center;
+        }
+        .stat-num {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .records {
+            margin: 16px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .record-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+            color: #555;
+        }
+        .record-item strong { color: #333; }
+        .record-num {
+            display: inline-block;
+            width: 40px;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .hidden { display: none; }
+        .msg {
+            text-align: center;
+            font-size: 14px;
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 8px;
+        }
+        .msg-ok { background: #e8f5e9; color: #2e7d32; }
+        .msg-err { background: #ffebee; color: #c62828; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <!-- 登录 -->
+        <div id="loginView">
+            <div class="title">🔐 管理后台登录</div>
+            <div class="login-tip">请输入管理员密码</div>
+            <input type="password" class="input" id="pwdInput" placeholder="管理员密码" onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="btn btn-primary" onclick="doLogin()">登录</button>
+            <div id="loginMsg" class="msg hidden"></div>
+        </div>
+
+        <!-- 主面板 -->
+        <div id="mainView" class="hidden">
+            <div class="title">📊 取号管理面板</div>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-num" id="curNumber">0</div>
+                    <div class="stat-label">当前号数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-num" id="recCount">0</div>
+                    <div class="stat-label">今日登记</div>
+                </div>
+            </div>
+
+            <button class="btn btn-danger" onclick="resetQueue()">🔄 重置取号（清零）</button>
+            <button class="btn btn-secondary" onclick="refreshData()" style="margin-top:10px;">🔃 刷新数据</button>
+            <div id="opMsg" class="msg hidden"></div>
+
+            <div class="records" id="recordList"></div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 配置（与 index.html 保持一致）==========
+        const CONFIG = {
+            BIN_ID: '',          // JSONBin.io 的 Bin ID
+            API_KEY: '',         // JSONBin.io 的 API Key
+            ADMIN_PWD: 'yunjing2026'  // 管理员密码，可自行修改
+        };
+
+        let isCloud = false;
+
+        function doLogin() {
+            const pwd = document.getElementById('pwdInput').value;
+            const msg = document.getElementById('loginMsg');
+            if (pwd === CONFIG.ADMIN_PWD) {
+                document.getElementById('loginView').classList.add('hidden');
+                document.getElementById('mainView').classList.remove('hidden');
+                isCloud = !!(CONFIG.BIN_ID && CONFIG.API_KEY);
+                refreshData();
+            } else {
+                msg.textContent = '密码错误，请重试';
+                msg.className = 'msg msg-err';
+                msg.classList.remove('hidden');
+            }
+        }
+
+        async function refreshData() {
+            try {
+                if (isCloud) {
+                    const resp = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}/latest`, {
+                        headers: { 'X-Master-Key': CONFIG.API_KEY }
+                    });
+                    const data = await resp.json();
+                    const today = new Date().toLocaleDateString('zh-CN');
+                    if (data.record.date !== today) {
+                        document.getElementById('curNumber').textContent = '0';
+                        document.getElementById('recCount').textContent = '0';
+                    } else {
+                        document.getElementById('curNumber').textContent = data.record.currentNumber || 0;
+                        document.getElementById('recCount').textContent = (data.record.records || []).length;
+                    }
+                    renderRecords(data.record.records || []);
+                } else {
+                    // 本地模式
+                    const num = parseInt(localStorage.getItem('yunjing_queue_v2') || '0');
+                    const records = JSON.parse(localStorage.getItem('yunjing_records_v2') || '[]');
+                    document.getElementById('curNumber').textContent = num;
+                    document.getElementById('recCount').textContent = records.length;
+                    renderRecords(records);
+                }
+            } catch(e) {
+                showOpMsg('数据加载失败：' + e.message, false);
+            }
+        }
+
+        function renderRecords(records) {
+            const list = document.getElementById('recordList');
+            if (!records.length) {
+                list.innerHTML = '<div class="record-item" style="text-align:center;color:#999;">暂无登记记录</div>';
+                return;
+            }
+            // 倒序显示（最新在前）
+            list.innerHTML = records.slice().reverse().map(r =>
+                `<div class="record-item">
+                    <span class="record-num">${String(r.number).padStart(3,'0')}</span>
+                    <strong>${r.studentName}</strong> / ${r.parentName} / ${r.phone}
+                </div>`
+            ).join('');
+        }
+
+        async function resetQueue() {
+            if (!confirm('确定要重置取号吗？所有号数将清零（今日登记记录保留）。')) return;
+            const today = new Date().toLocaleDateString('zh-CN');
+            try {
+                if (isCloud) {
+                    const resp = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}/latest`, {
+                        headers: { 'X-Master-Key': CONFIG.API_KEY }
+                    });
+                    const data = await resp.json();
+                    const records = data.record.records || [];
+                    await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'X-Master-Key': CONFIG.API_KEY },
+                        body: JSON.stringify({ currentNumber: 0, date: today, records: records, batch: Date.now(), updatedAt: new Date().toISOString() })
+                    });
+                } else {
+                    localStorage.setItem('yunjing_queue_v2', '0');
+                    localStorage.setItem('yunjing_queue_date_v2', today);
+                }
+                showOpMsg('✅ 取号已重置为 0', true);
+                refreshData();
+            } catch(e) {
+                showOpMsg('重置失败：' + e.message, false);
+            }
+        }
+
+        function showOpMsg(text, ok) {
+            const msg = document.getElementById('opMsg');
+            msg.textContent = text;
+            msg.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+    </script>
+</body>
+</html>
